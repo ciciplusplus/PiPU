@@ -703,26 +703,16 @@ int cmpfunc (const void * a, const void * b)
 
 int frameCount = 0;
 
-void FindBgColorAndPalette(char *frameBuf, bool skip)
+void CleanColorFrequencies()
 {
-	if (skip) return;
-
-	Color currPix;
-
 	for (int i = 0; i < NESCOLORCOUNT; i++) {
 		MostCommonColorInFrame[i].colNo = i;
 		MostCommonColorInFrame[i].frequency = 0;
 	}
+}
 
-	for (int y = 0; y < 240; y++) {
-		for (int x = 0; x < 256; x++) {
-			getpixel(frameBuf, x, y, &currPix.r, &currPix.g, &currPix.b);
-
-			MostCommonColorInFrame[ColorSimilarity[currPix.r][currPix.g][currPix.b]].frequency++;
-		}
-	}
-
-
+void SortAndAssignUpdatedPalette()
+{
 	qsort(MostCommonColorInFrame, NESCOLORCOUNT, sizeof(Colmatch), CompareColMatch);
 
 	BgColor = MostCommonColorInFrame[NESCOLORCOUNT - 1].colNo;
@@ -733,6 +723,25 @@ void FindBgColorAndPalette(char *frameBuf, bool skip)
 			pmdata->Palettes[i][j] = MostCommonColorInFrame[NESCOLORCOUNT - (total + 2)].colNo;
 		}
 	}
+}
+
+void FindBgColorAndPalette(char *frameBuf, bool skip)
+{
+	if (skip) return;
+
+	CleanColorFrequencies();
+
+	Color currPix;
+	for (int y = 0; y < 240; y++) {
+		for (int x = 0; x < 256; x++) {
+			getpixel(frameBuf, x, y, &currPix.r, &currPix.g, &currPix.b);
+
+			MostCommonColorInFrame[ColorSimilarity[currPix.r][currPix.g][currPix.b]].frequency++;
+		}
+	}
+
+
+	SortAndAssignUpdatedPalette();
 }
 
 // Convert a single frame segment to NES format
@@ -759,12 +768,14 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 	unsigned char bestNesColor;
 	unsigned char *pal;
 
+	bool updatePalettes = frameCount++ % 15 == 0;
+
 
 	if (startline == 0)
 	{
 		clock_t ticBg;
 		if (measure) ticBg = clock();
-		FindBgColorAndPalette(bmp, frameCount++ % 15 != 0);
+		FindBgColorAndPalette(bmp, !updatePalettes);
 		if (measure) totalBgColor = (double)(clock() - ticBg) / CLOCKS_PER_SEC;
 
 		//BgColor = FindBgColor(bmp);
