@@ -725,25 +725,6 @@ void SortAndAssignUpdatedPalette()
 	}
 }
 
-void FindBgColorAndPalette(char *frameBuf, bool skip)
-{
-	if (skip) return;
-
-	CleanColorFrequencies();
-
-	Color currPix;
-	for (int y = 0; y < 240; y++) {
-		for (int x = 0; x < 256; x++) {
-			getpixel(frameBuf, x, y, &currPix.r, &currPix.g, &currPix.b);
-
-			MostCommonColorInFrame[ColorSimilarity[currPix.r][currPix.g][currPix.b]].frequency++;
-		}
-	}
-
-
-	SortAndAssignUpdatedPalette();
-}
-
 // Convert a single frame segment to NES format
 void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 {
@@ -751,6 +732,9 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 	bool measure = envVar != NULL && atoi(envVar);
 
 	clock_t tic;
+	clock_t ticBg;
+	clock_t ticPalFind;
+	clock_t ticPalSlice;
 
 	double total = 0;
 	double totalBgColor = 0;
@@ -768,18 +752,15 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 	unsigned char bestNesColor;
 	unsigned char *pal;
 
-	bool updatePalettes = frameCount++ % 15 == 0;
+	bool updatePalettes = false;
 
 
 	if (startline == 0)
 	{
-		clock_t ticBg;
 		if (measure) ticBg = clock();
-		FindBgColorAndPalette(bmp, !updatePalettes);
-		if (measure) totalBgColor = (double)(clock() - ticBg) / CLOCKS_PER_SEC;
-
-		//BgColor = FindBgColor(bmp);
-		//printf("bg %d\n", BgColor);
+		updatePalettes = (frameCount++ % 15 == 0);
+		if (updatePalettes) CleanColorFrequencies();
+		if (measure) totalBgColor += (double)(clock() - ticBg) / CLOCKS_PER_SEC;
 
 		theFrame->OtherData[0] = 0x54;
 		theFrame->OtherData[1] = 0x17; // Magic value
@@ -846,7 +827,6 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 			xoff = i * 8;
 
 			// Find the most suitable palette for this slice
-			clock_t ticPalSlice;
 			if (measure) ticPalSlice = clock();
 			palToUse = FindBestPalForSlice(bmp, xoff, y);
 			if (measure) totalFindPalForSlice += (double)(clock() - ticPalSlice) / CLOCKS_PER_SEC;
@@ -867,7 +847,6 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 				getpixel(bmp, x, y, &currPix.r, &currPix.g, &currPix.b);
 
 				// find closest color match from palette we chose
-				clock_t ticPalFind;
 				if (measure) ticPalFind = clock();
 				//bestcol = FindBestColorMatchFromPalette(currPix, pmdata->Palettes[palToUse], BgColor); // Slow but dynamic palette
 
@@ -890,6 +869,10 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 				currTile.HighBG = currTile.HighBG | (((bestcol >> 1) & 0x01) << offset);
 
 				offset--;
+
+				if (measure) ticBg = clock();
+				if (updatePalettes) MostCommonColorInFrame[ColorSimilarity[currPix.r][currPix.g][currPix.b]].frequency++;
+				if (measure) totalBgColor += (double)(clock() - ticBg) / CLOCKS_PER_SEC;
 			}
 			//printf("\n");
 
@@ -906,6 +889,10 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 
 		}
 	}
+
+	if (measure) ticBg = clock();
+	if (updatePalettes) SortAndAssignUpdatedPalette();
+	if (measure) totalBgColor += (double)(clock() - ticBg) / CLOCKS_PER_SEC;
 
 	if (measure)  {
 		clock_t toc = clock();
