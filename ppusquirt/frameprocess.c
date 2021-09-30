@@ -11,6 +11,7 @@
 #include <pthread.h>
 #include <libusb-1.0/libusb.h>
 #include "nesstuff.h"
+#include <stdbool.h>
 
 // Bgcolor is always black
 int BgColor = 0x0f;
@@ -636,16 +637,11 @@ int cmpfunc (const void * a, const void * b)
 
 int frameCount = 0;
 
-void FindBgColorAndPalette(char *frameBuf, int skip)
+void FindBgColorAndPalette(char *frameBuf, bool skip)
 {
 	if (skip) return;
 
-	// unsigned char FindBestColorMatch(Color theColor)
-
 	Color currPix;
-
-	//int freq[NESCOLORCOUNT];
-	//memset(&freq, 0x00, sizeof(freq));
 
 	for (int i = 0; i < NESCOLORCOUNT; i++) {
 		MostCommonColorInFrame[i].colNo = i;
@@ -656,46 +652,22 @@ void FindBgColorAndPalette(char *frameBuf, int skip)
 		for (int x = 0; x < 256; x++) {
 			getpixel(frameBuf, x, y, &currPix.r, &currPix.g, &currPix.b);
 
-			MostCommonColorInFrame[FindBestColorMatch(currPix)].frequency++;
+			unsigned char color = FindBestColorMatch(currPix);
+
+			if (color != BgColor) 
+				MostCommonColorInFrame[color].frequency++;
 		}
 	}
-
-	// int bestCnt = -1;
-	// unsigned char bestBg = -1;
-
-	// for (int i = 0; i < NESCOLORCOUNT; i++) {
-	// 	if (freq[i] > bestCnt) {
-	// 		bestBg = i;
-	// 		bestCnt = freq[i];
-	// 	}
-	// 	//printf("%d,", freq[i]);
-	// }
-	// //printf(";\n");
-
-	// //return bestBg;
-
-	// BgColor = bestBg;
 
 
 	qsort(MostCommonColorInFrame, NESCOLORCOUNT, sizeof(Colmatch), CompareColMatch);
 
-	BgColor = MostCommonColorInFrame[NESCOLORCOUNT - 1].colNo;
-
-	pmdata->Palettes[0][0] = MostCommonColorInFrame[NESCOLORCOUNT - 2].colNo;
-	pmdata->Palettes[0][1] = MostCommonColorInFrame[NESCOLORCOUNT - 3].colNo;
-	pmdata->Palettes[0][2] = MostCommonColorInFrame[NESCOLORCOUNT - 4].colNo;
-
-	pmdata->Palettes[1][0] = MostCommonColorInFrame[NESCOLORCOUNT - 5].colNo;
-	pmdata->Palettes[1][1] = MostCommonColorInFrame[NESCOLORCOUNT - 6].colNo;
-	pmdata->Palettes[1][2] = MostCommonColorInFrame[NESCOLORCOUNT - 7].colNo;
-
-	pmdata->Palettes[2][0] = MostCommonColorInFrame[NESCOLORCOUNT - 8].colNo;
-	pmdata->Palettes[2][1] = MostCommonColorInFrame[NESCOLORCOUNT - 9].colNo;
-	pmdata->Palettes[2][2] = MostCommonColorInFrame[NESCOLORCOUNT - 10].colNo;
-
-	pmdata->Palettes[3][0] = MostCommonColorInFrame[NESCOLORCOUNT - 11].colNo;
-	pmdata->Palettes[3][1] = MostCommonColorInFrame[NESCOLORCOUNT - 12].colNo;
-	pmdata->Palettes[3][2] = MostCommonColorInFrame[NESCOLORCOUNT - 13].colNo;
+	for (int i = 0; i < 4; i++) {
+		for (int j = 0; j < 3; j++) {
+			int total = i * 3 + j;
+			pmdata->Palettes[i][j] = MostCommonColorInFrame[NESCOLORCOUNT - (total + 1)].colNo;
+		}
+	}
 }
 
 // Convert a single frame segment to NES format
