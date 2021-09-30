@@ -12,6 +12,7 @@
 #include <libusb-1.0/libusb.h>
 #include "nesstuff.h"
 #include <stdbool.h>
+#include <assert.h>
 
 // Bgcolor is always black
 int BgColor = 0x0f;
@@ -33,6 +34,9 @@ unsigned char ColorSimilarity[256][256][256];
 // For given "local" palette + bg color and other color get index of most similar color in this palette (stored in 2 bits)
 // Attention: 256 Mb of memory
 unsigned char PaletteSimilarity[NESCOLORCOUNT][NESCOLORCOUNT][NESCOLORCOUNT][NESCOLORCOUNT][NESCOLORCOUNT / 4];
+
+bool PalettePositions[NESCOLORCOUNT];
+Colmatch ColorFrameNeighbours[NESCOLORCOUNT][NESCOLORCOUNT];
 
 // Ordered dither map
 double map[8][8] = {
@@ -126,6 +130,8 @@ void getpixel(char *frameBuf, unsigned int x, unsigned int y, unsigned char *r, 
 	flx = (unsigned int)((float)1.25 * (float)x);
 
 	unsigned int off = ((320 * y) + flx) * 4;
+
+	//unsigned int off = ((256 * y) + x) * 4;
 	*b = frameBuf[off];
 	*g = frameBuf[off + 1];
 	*r = frameBuf[off + 2];
@@ -135,7 +141,10 @@ void setpixel(char *frameBuf, unsigned int x, unsigned int y, unsigned char r, u
 {
 	unsigned int flx = 0;
 	flx = (unsigned int)((float)1.25 * (float)x);
+
 	unsigned int off = ((320 * y) + flx) * 4;
+
+	//unsigned int off = ((256 * y) + x) * 4;
 	*(frameBuf + off) = b;
 	*(frameBuf + off + 1) = g;
 	*(frameBuf + off + 2) = r;
@@ -294,6 +303,13 @@ long CompareColMatch(const void *s1, const void *s2)
 	Colmatch *e1 = (Colmatch *)s1;
 	Colmatch *e2 = (Colmatch *)s2;
 	return e1->frequency - e2->frequency;
+}
+
+long CompareColMatchWithWeight(const void *s1, const void *s2)
+{
+	Colmatch *e1 = (Colmatch *)s1;
+	Colmatch *e2 = (Colmatch *)s2;
+	return (PalettePositions[e1->colNo] * 100000 + e1->frequency) - (PalettePositions[e2->colNo] * 100000 + e2->frequency);
 }
 
 unsigned char SatAdd8(signed short n1, signed short n2)
@@ -717,12 +733,44 @@ void SortAndAssignUpdatedPalette()
 
 	BgColor = MostCommonColorInFrame[NESCOLORCOUNT - 1].colNo;
 
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < 12; i++) {
+		PalettePositions[MostCommonColorInFrame[NESCOLORCOUNT - (i + 2)].colNo] = true;
+	}
+
+	unsigned char palColorCandidate;
+	int palNumber = 0;
+	int colorSets = 0;
+	for (int i = 0; i < 12; i++) {
+		palColorCandidate = MostCommonColorInFrame[NESCOLORCOUNT - (i + 2)].colNo;
+		if (!PalettePositions[palColorCandidate]) continue;
+
+		//pmdata->Palettes[palNumber][0] = palColorCandidate;
+		//palNumber++;
+
+		qsort(ColorFrameNeighbours[palColorCandidate], NESCOLORCOUNT, sizeof(Colmatch), CompareColMatchWithWeight);
+
+		pmdata->Palettes[palNumber][0] = palColorCandidate;
+		pmdata->Palettes[palNumber][1] = ColorFrameNeighbours[palColorCandidate][NESCOLORCOUNT - 1].colNo;
+		pmdata->Palettes[palNumber][2] = ColorFrameNeighbours[palColorCandidate][NESCOLORCOUNT - 2].colNo;
+
+		for (int j = 0; j < 3; j++) {
+			PalettePositions[pmdata->Palettes[palNumber][j]] = false;
+			colorSets++;
+		}
+		palNumber++;
+		if (palNumber == 4) break;
+	}
+
+	//printf("palNumber %d, sets %d\n", palNumber, colorSets);
+
+	//assert(palNumber == 4);
+
+/*	for (int i = 0; i < 4; i++) {
 		for (int j = 0; j < 3; j++) {
 			int total = i * 3 + j;
 			pmdata->Palettes[i][j] = MostCommonColorInFrame[NESCOLORCOUNT - (total + 2)].colNo;
 		}
-	}
+	}*/
 }
 
 bool mustUpdatePalette = false;
@@ -738,6 +786,7 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 	short bestcol;
 
 	unsigned char bestNesColor;
+	unsigned char prevBestNesColor;
 	unsigned char *pal;
 
 
@@ -748,7 +797,17 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 			hasUpdatedPalette = false;
 		}
 		mustUpdatePalette = (frameCount++ % 15 == 0);
-		if (mustUpdatePalette) CleanColorFrequencies();
+		if (mustUpdatePalette) {
+			CleanColorFrequencies();
+
+			for (int i = 0; i < NESCOLORCOUNT; i++) {
+				PalettePositions[i] = false;
+				for (int j = 0; j < NESCOLORCOUNT; j++) {
+					ColorFrameNeighbours[i][j].colNo = j;
+					ColorFrameNeighbours[i][j].frequency = 0;
+				}
+			}
+		}
 
 		theFrame->OtherData[0] = 0x54;
 		theFrame->OtherData[1] = 0x17; // Magic value
@@ -807,6 +866,8 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 	{ 
 		int currScanLine = y + 1;
 
+		prevBestNesColor = BgColor;
+
 		// For each 8x1 attribute slice
 		for (i = 0; i < 32; i++)
 		{ 
@@ -854,7 +915,16 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 
 				offset--;
 
-				if (mustUpdatePalette) MostCommonColorInFrame[ColorSimilarity[currPix.r][currPix.g][currPix.b]].frequency++;
+				if (mustUpdatePalette) {
+					MostCommonColorInFrame[bestNesColor].frequency++;
+
+					if (bestNesColor != prevBestNesColor && bestNesColor != BgColor && prevBestNesColor != BgColor) {
+						ColorFrameNeighbours[bestNesColor][prevBestNesColor].frequency++;
+						ColorFrameNeighbours[prevBestNesColor][bestNesColor].frequency++;
+					}
+				}
+
+				prevBestNesColor = bestNesColor;
 			}
 			//printf("\n");
 
