@@ -28,6 +28,12 @@ Colmatch MostCommonColorInFrame[NESCOLORCOUNT];
 unsigned char PaletteLookup[256][256][256]; // for matching a color to a palette
 signed char ColorLookup[256][256][256][4];  // For matching to a color within the palette
 
+// For given rgb color get most similar color index from palette
+unsigned char ColorSimilarity[256][256][256];
+// For given "local" palette and other color get index of most similar color in this palette
+// NOTE: can optimize for memory (~16 Mb, but index is just 0,1,2 or -1(bgcolor))
+signed char PaletteSimilarity[NESCOLORCOUNT][NESCOLORCOUNT][NESCOLORCOUNT][NESCOLORCOUNT];
+
 // Ordered dither map
 double map[8][8] = {
 	{0, 48, 12, 60, 3, 51, 15, 63},
@@ -535,6 +541,57 @@ void GFXSetup()
 		fwrite(&ColorLookup, 256 * 256 * 256 * 4, 1, fp);
 		fclose(fp);
 	}
+
+	if (fp = fopen("similarity.bin", "r"))
+	{
+		if ((n = fread(&ColorSimilarity, 1, 256 * 256 * 256, fp)) != (256 * 256 * 256)){ printf("sim exit : %lu\n", n); exit(1); }
+		if ((n = fread(&PaletteSimilarity, 1, NESCOLORCOUNT * NESCOLORCOUNT * NESCOLORCOUNT * NESCOLORCOUNT, fp)) != (NESCOLORCOUNT * NESCOLORCOUNT * NESCOLORCOUNT * NESCOLORCOUNT)){ printf("sim exit2 : %lu\n", n); exit(1); }
+		fclose(fp);
+	}
+	else
+	{
+		for (int r = 0; r < 256; r++)
+		{
+			for (int g = 0; g < 256; g++)
+			{
+				for (int b = 0; b < 256; b++)
+				{
+					col.r = r;
+					col.g = g;
+					col.b = b;
+					unsigned char p = FindBestColorMatch(col);
+					ColorSimilarity[r][g][b] = p;
+				}
+			}
+			printf("sim 1/2: %d / 256 - %d\n", r, ColorSimilarity[r][255][255]);
+		}
+
+		unsigned char palette[3];
+		for (unsigned char p0 = 0; p0 < NESCOLORCOUNT; p0++)
+		{
+			palette[0] = p0;
+			for (unsigned char p1 = 0; p1 < NESCOLORCOUNT; p1++)
+			{
+				palette[1] = p1;
+				for (unsigned char p2 = 0; p2 < NESCOLORCOUNT; p2++)
+				{
+					palette[2] = p2;
+
+					for (unsigned char p = 0; p < NESCOLORCOUNT; p++)
+					{
+						PaletteSimilarity[p0][p1][p2][p] = FindBestColorMatchFromPalette(NesPalette[p], &palette, BgColor);
+					}
+				}
+			}
+			printf("sim 2/2: %d / %d - %d\n", p0, NESCOLORCOUNT, PaletteSimilarity[p0][NESCOLORCOUNT - 1][NESCOLORCOUNT - 1][NESCOLORCOUNT - 1]);
+		}
+
+		fp = fopen("similarity.bin", "w+");
+
+		fwrite(&ColorSimilarity, 256 * 256 * 256, 1, fp);
+		fwrite(&PaletteSimilarity, NESCOLORCOUNT * NESCOLORCOUNT * NESCOLORCOUNT * NESCOLORCOUNT, 1, fp);
+		fclose(fp);
+	}
 }
 
 #define DATA_OFFSET_OFFSET 0x000A
@@ -691,6 +748,9 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 	int palToUse;
 	short bestcol;
 
+	unsigned char bestNesColor;
+	unsigned char *pal;
+
 
 	if (startline == 0)
 	{
@@ -790,7 +850,12 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 				// find closest color match from palette we chose
 				clock_t ticPalFind;
 				if (measure) ticPalFind = clock();
-				bestcol = FindBestColorMatchFromPalette(currPix, pmdata->Palettes[palToUse], BgColor); // Slow but dynamic palette
+				//bestcol = FindBestColorMatchFromPalette(currPix, pmdata->Palettes[palToUse], BgColor); // Slow but dynamic palette
+
+				bestNesColor = ColorSimilarity[currPix.r][currPix.g][currPix.b];
+				pal = pmdata->Palettes[palToUse];
+				bestcol = PaletteSimilarity[pal[0]][pal[1]][pal[2]][bestNesColor];
+
 				//bestcol = ColorLookup[currPix.r][currPix.g][currPix.b][palToUse]; // Quick but locked to one palette
 				if (measure) totalFindColorMatch += (double)(clock() - ticPalFind) / CLOCKS_PER_SEC;
 
