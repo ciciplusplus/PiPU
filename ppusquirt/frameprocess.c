@@ -725,6 +725,9 @@ void SortAndAssignUpdatedPalette()
 	}
 }
 
+bool mustUpdatePalette = false;
+bool hasUpdatedPalette = false;
+
 // Convert a single frame segment to NES format
 void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 {
@@ -752,14 +755,16 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 	unsigned char bestNesColor;
 	unsigned char *pal;
 
-	bool updatePalettes = false;
-
 
 	if (startline == 0)
 	{
 		if (measure) ticBg = clock();
-		updatePalettes = (frameCount++ % 15 == 0);
-		if (updatePalettes) CleanColorFrequencies();
+		if (hasUpdatedPalette) {
+			SortAndAssignUpdatedPalette();
+			hasUpdatedPalette = false;
+		}
+		mustUpdatePalette = (frameCount++ % 15 == 0);
+		if (mustUpdatePalette) CleanColorFrequencies();
 		if (measure) totalBgColor += (double)(clock() - ticBg) / CLOCKS_PER_SEC;
 
 		theFrame->OtherData[0] = 0x54;
@@ -871,7 +876,7 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 				offset--;
 
 				if (measure) ticBg = clock();
-				if (updatePalettes) MostCommonColorInFrame[ColorSimilarity[currPix.r][currPix.g][currPix.b]].frequency++;
+				if (mustUpdatePalette) MostCommonColorInFrame[ColorSimilarity[currPix.r][currPix.g][currPix.b]].frequency++;
 				if (measure) totalBgColor += (double)(clock() - ticBg) / CLOCKS_PER_SEC;
 			}
 			//printf("\n");
@@ -890,9 +895,7 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 		}
 	}
 
-	if (measure) ticBg = clock();
-	if (updatePalettes) SortAndAssignUpdatedPalette();
-	if (measure) totalBgColor += (double)(clock() - ticBg) / CLOCKS_PER_SEC;
+	hasUpdatedPalette = mustUpdatePalette;
 
 	if (measure)  {
 		clock_t toc = clock();
