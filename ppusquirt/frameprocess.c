@@ -758,7 +758,6 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 
 	unsigned char bestNesColor;
 	unsigned char *pal;
-	int bitOffset;
 
 
 	if (startline == 0)
@@ -863,8 +862,7 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 
 				bestNesColor = ColorSimilarity[currPix.r][currPix.g][currPix.b];
 				pal = pmdata->Palettes[palToUse];
-				bitOffset = (bestNesColor & 0x03) << 1;
-				bestcol = (PaletteSimilarity[BgColor][pal[0]][pal[1]][pal[2]][bestNesColor >> 2] & (0x03 << bitOffset)) >> bitOffset;
+				bestcol = PaletteSimilarity[BgColor][pal[0]][pal[1]][pal[2]][bestNesColor >> 2] >> ((bestNesColor & 0x03) << 1);
 
 				//bestcol = ColorLookup[currPix.r][currPix.g][currPix.b][palToUse]; // Quick but locked to one palette
 				if (measure) totalFindColorMatch += (double)(clock() - ticPalFind) / CLOCKS_PER_SEC;
