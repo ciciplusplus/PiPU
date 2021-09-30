@@ -268,8 +268,8 @@ int FindBestPalForSlice(char *bmp, unsigned int xoff, unsigned int yoff)
 	for (x = xoff; x < xoff + 8; x += 1)
 	{
 		getpixel(bmp, x, y, &currPix.r, &currPix.g, &currPix.b);
-		//bestPal = FindBestPalForPixel(currPix);
-		bestPal = PaletteLookup[currPix.r][currPix.g][currPix.b];
+		bestPal = FindBestPalForPixel(currPix);
+		//bestPal = PaletteLookup[currPix.r][currPix.g][currPix.b];
 
 		if (bestPal != -1)
 		{
@@ -314,15 +314,15 @@ void GFXSetup()
 
 	// Load Palette from external file 
 	// disabled because it doesn't look as good as this internal one for some reason
-	/*if (fp = fopen("ntscpalette.pal", "r"))
+	if (fp = fopen("ntscpalette.pal", "r"))
 	{
 		if ((n = fread(&NesPalette, 1, 64*3, fp)) != (64*3)){ printf("exit : %lu\n", n); exit(1); }
 		fclose(fp);
-	}*/
+	}
 
 
 	// Generate NES palette from the string info
-	for (i = 0; i < 64; i++)
+/*	for (i = 0; i < 64; i++)
 	{
 		curCol = NesPaletteStrings[i];
 
@@ -337,7 +337,7 @@ void GFXSetup()
 		curHex[0] = curCol[4];
 		curHex[1] = curCol[5];
 		NesPalette[i].b = (unsigned char)strtoul(curHex, &dummy, 16);
-	}
+	}*/
 
 	// Generate ordered dither map
 	for (i = 0; i < 8; i++)
@@ -351,23 +351,29 @@ void GFXSetup()
 	// Open palette/music shared memory area
 	int fd;
 	fd = shm_open("/palmusdata", O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
-	if (fd == -1)
+	if (fd == -1) {
+		perror("fp: shm_open error");
 		exit(1);
+	}
 
-	if (ftruncate(fd, sizeof(struct palmusdata)) == -1)
+	if (ftruncate(fd, sizeof(struct palmusdata)) == -1) {
+		perror("fp: ftruncate error");
 		exit(1);
+	}
 
 	pmdata = mmap(NULL, sizeof(struct palmusdata), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	if (pmdata == MAP_FAILED)
+	if (pmdata == MAP_FAILED) {
+		perror("fp: mmap error");
 		exit(1);
+	}
 
 
 	// Default DOOM Palette
 
 	//black for bg
-	BgColor = 0x0f;
+	//BgColor = 0x21;//0x0f;
 
-	//dark greys + green
+/*	//dark greys + green
 	pmdata->Palettes[0][0] = 0x10;
 	pmdata->Palettes[0][1] = 0x09;
 	pmdata->Palettes[0][2] = 0x2d;
@@ -385,7 +391,7 @@ void GFXSetup()
 	//reds and light grey
 	pmdata->Palettes[3][0] = 0x06;
 	pmdata->Palettes[3][1] = 0x16;
-	pmdata->Palettes[3][2] = 0x3d;
+	pmdata->Palettes[3][2] = 0x3d;*/
 
 	//Low Intensity RGB
 	/*pmdata->Palettes[0][0] = 0x16;
@@ -408,7 +414,7 @@ void GFXSetup()
 	pmdata->Palettes[3][2] = 0x20;*/
 
 	//R
-	/*pmdata->Palettes[0][0] = 0x06;
+	pmdata->Palettes[0][0] = 0x06;
 	pmdata->Palettes[0][1] = 0x16;
 	pmdata->Palettes[0][2] = 0x26;
 
@@ -425,7 +431,7 @@ void GFXSetup()
 	//greys and white
 	pmdata->Palettes[3][0] = 0x2D;
 	pmdata->Palettes[3][1] = 0x3D;
-	pmdata->Palettes[3][2] = 0x20;*/
+	pmdata->Palettes[3][2] = 0x20;
 
 	//R + white
 	/*pmdata->Palettes[0][0] = 0x06;
@@ -468,7 +474,7 @@ void GFXSetup()
 	pmdata->Palettes[3][2] = 0x20;*/
 
 	//black for bg
-	/*BgColor = 0x0f;
+/*	BgColor = 0x0f;
 
 	pmdata->Palettes[0][0] = 0x02;
 	pmdata->Palettes[0][1] = 0x22;
@@ -530,6 +536,168 @@ void GFXSetup()
 	}
 }
 
+#define DATA_OFFSET_OFFSET 0x000A
+#define WIDTH_OFFSET 0x0012
+#define HEIGHT_OFFSET 0x0016
+#define BITS_PER_PIXEL_OFFSET 0x001C
+#define HEADER_SIZE 14
+#define INFO_HEADER_SIZE 40
+#define NO_COMPRESION 0
+#define MAX_NUMBER_OF_COLORS 0
+#define ALL_COLORS_REQUIRED 0
+ 
+typedef unsigned int int32;
+typedef short int16;
+typedef unsigned char byte;
+ 
+void ReadImage(const char *fileName,byte **pixels, int32 *width, int32 *height, int32 *bytesPerPixel)
+{
+        FILE *imageFile = fopen(fileName, "rb");
+        int32 dataOffset;
+        fseek(imageFile, DATA_OFFSET_OFFSET, SEEK_SET);
+        fread(&dataOffset, 4, 1, imageFile);
+        fseek(imageFile, WIDTH_OFFSET, SEEK_SET);
+        fread(width, 4, 1, imageFile);
+        fseek(imageFile, HEIGHT_OFFSET, SEEK_SET);
+        fread(height, 4, 1, imageFile);
+        int16 bitsPerPixel;
+        fseek(imageFile, BITS_PER_PIXEL_OFFSET, SEEK_SET);
+        fread(&bitsPerPixel, 2, 1, imageFile);
+        *bytesPerPixel = ((int32)bitsPerPixel) / 8;
+ 
+        int paddedRowSize = (int)(4 * ceil((float)(*width) / 4.0f))*(*bytesPerPixel);
+        int unpaddedRowSize = (*width)*(*bytesPerPixel);
+        int totalSize = unpaddedRowSize*(*height);
+        *pixels = (byte*)malloc(totalSize);
+        int i = 0;
+        byte *currentRowPointer = *pixels+((*height-1)*unpaddedRowSize);
+        for (i = 0; i < *height; i++)
+        {
+                fseek(imageFile, dataOffset+(i*paddedRowSize), SEEK_SET);
+            fread(currentRowPointer, 1, unpaddedRowSize, imageFile);
+            currentRowPointer -= unpaddedRowSize;
+        }
+ 
+        fclose(imageFile);
+}
+ 
+void WriteImage(const char *fileName, byte *pixels, int32 width, int32 height,int32 bytesPerPixel)
+{
+        FILE *outputFile = fopen(fileName, "wb");
+        //*****HEADER************//
+        const char *BM = "BM";
+        fwrite(&BM[0], 1, 1, outputFile);
+        fwrite(&BM[1], 1, 1, outputFile);
+        int paddedRowSize = (int)(4 * ceil((float)width/4.0f))*bytesPerPixel;
+        int32 fileSize = paddedRowSize*height + HEADER_SIZE + INFO_HEADER_SIZE;
+        fwrite(&fileSize, 4, 1, outputFile);
+        int32 reserved = 0x0000;
+        fwrite(&reserved, 4, 1, outputFile);
+        int32 dataOffset = HEADER_SIZE+INFO_HEADER_SIZE;
+        fwrite(&dataOffset, 4, 1, outputFile);
+ 
+        //*******INFO*HEADER******//
+        int32 infoHeaderSize = INFO_HEADER_SIZE;
+        fwrite(&infoHeaderSize, 4, 1, outputFile);
+        fwrite(&width, 4, 1, outputFile);
+        fwrite(&height, 4, 1, outputFile);
+        int16 planes = 1; //always 1
+        fwrite(&planes, 2, 1, outputFile);
+        int16 bitsPerPixel = bytesPerPixel * 8;
+        fwrite(&bitsPerPixel, 2, 1, outputFile);
+        //write compression
+        int32 compression = NO_COMPRESION;
+        fwrite(&compression, 4, 1, outputFile);
+        //write image size (in bytes)
+        int32 imageSize = width*height*bytesPerPixel;
+        fwrite(&imageSize, 4, 1, outputFile);
+        int32 resolutionX = 11811; //300 dpi
+        int32 resolutionY = 11811; //300 dpi
+        fwrite(&resolutionX, 4, 1, outputFile);
+        fwrite(&resolutionY, 4, 1, outputFile);
+        int32 colorsUsed = MAX_NUMBER_OF_COLORS;
+        fwrite(&colorsUsed, 4, 1, outputFile);
+        int32 importantColors = ALL_COLORS_REQUIRED;
+        fwrite(&importantColors, 4, 1, outputFile);
+        int i = 0;
+        int unpaddedRowSize = width*bytesPerPixel;
+        for ( i = 0; i < height; i++)
+        {
+                int pixelOffset = ((height - i) - 1)*unpaddedRowSize;
+                fwrite(&pixels[pixelOffset], 1, paddedRowSize, outputFile); 
+        }
+        fclose(outputFile);
+}
+
+int cmpfunc (const void * a, const void * b)
+{
+   return ( *(int*)a - *(int*)b );
+}
+
+int frameCount = 0;
+
+void FindBgColorAndPalette(char *frameBuf, int skip)
+{
+	if (skip) return;
+
+	// unsigned char FindBestColorMatch(Color theColor)
+
+	Color currPix;
+
+	//int freq[NESCOLORCOUNT];
+	//memset(&freq, 0x00, sizeof(freq));
+
+	for (int i = 0; i < NESCOLORCOUNT; i++) {
+		MostCommonColorInFrame[i].colNo = i;
+		MostCommonColorInFrame[i].frequency = 0;
+	}
+
+	for (int y = 0; y < 240; y++) {
+		for (int x = 0; x < 256; x++) {
+			getpixel(frameBuf, x, y, &currPix.r, &currPix.g, &currPix.b);
+
+			MostCommonColorInFrame[FindBestColorMatch(currPix)].frequency++;
+		}
+	}
+
+	// int bestCnt = -1;
+	// unsigned char bestBg = -1;
+
+	// for (int i = 0; i < NESCOLORCOUNT; i++) {
+	// 	if (freq[i] > bestCnt) {
+	// 		bestBg = i;
+	// 		bestCnt = freq[i];
+	// 	}
+	// 	//printf("%d,", freq[i]);
+	// }
+	// //printf(";\n");
+
+	// //return bestBg;
+
+	// BgColor = bestBg;
+
+
+	qsort(MostCommonColorInFrame, NESCOLORCOUNT, sizeof(Colmatch), CompareColMatch);
+
+	BgColor = MostCommonColorInFrame[NESCOLORCOUNT - 1].colNo;
+
+	pmdata->Palettes[0][0] = MostCommonColorInFrame[NESCOLORCOUNT - 2].colNo;
+	pmdata->Palettes[0][1] = MostCommonColorInFrame[NESCOLORCOUNT - 3].colNo;
+	pmdata->Palettes[0][2] = MostCommonColorInFrame[NESCOLORCOUNT - 4].colNo;
+
+	pmdata->Palettes[1][0] = MostCommonColorInFrame[NESCOLORCOUNT - 5].colNo;
+	pmdata->Palettes[1][1] = MostCommonColorInFrame[NESCOLORCOUNT - 6].colNo;
+	pmdata->Palettes[1][2] = MostCommonColorInFrame[NESCOLORCOUNT - 7].colNo;
+
+	pmdata->Palettes[2][0] = MostCommonColorInFrame[NESCOLORCOUNT - 8].colNo;
+	pmdata->Palettes[2][1] = MostCommonColorInFrame[NESCOLORCOUNT - 9].colNo;
+	pmdata->Palettes[2][2] = MostCommonColorInFrame[NESCOLORCOUNT - 10].colNo;
+
+	pmdata->Palettes[3][0] = MostCommonColorInFrame[NESCOLORCOUNT - 11].colNo;
+	pmdata->Palettes[3][1] = MostCommonColorInFrame[NESCOLORCOUNT - 12].colNo;
+	pmdata->Palettes[3][2] = MostCommonColorInFrame[NESCOLORCOUNT - 13].colNo;
+}
+
 // Convert a single frame segment to NES format
 void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 {
@@ -542,6 +710,10 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 
 	if (startline == 0)
 	{
+		FindBgColorAndPalette(bmp, frameCount++ % 15 != 0);
+		//BgColor = FindBgColor(bmp);
+		//printf("bg %d\n", BgColor);
+
 		theFrame->OtherData[0] = 0x54;
 		theFrame->OtherData[1] = 0x17; // Magic value
 		theFrame->OtherData[2] = BgColor;
@@ -563,9 +735,11 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 		theFrame->OtherData[20] = pmdata->music; // Play E1M1 music
 		theFrame->OtherData[30] = 0xBE;
 		theFrame->OtherData[31] = 0xEF; // Magic Value
+
+		//WriteImage("test.bmp", bmp, 320, 240, 4);
 	}
 
-	// First apply dithering and brightness/contrast adjustment
+/*	// First apply dithering and brightness/contrast adjustment
 	for (y = startline; y < endline; y++)
 	{
 		for (x = 0; x < 256; x++)
@@ -586,9 +760,10 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 			currPix.r = SatAdd8(currPix.r, map[x % 8][y % 8]);
 			currPix.g = SatAdd8(currPix.g, map[x % 8][y % 8]);
 			currPix.b = SatAdd8(currPix.b, map[x % 8][y % 8]);
+
 			setpixel(bmp, x, y, currPix.r, currPix.g, currPix.b);
 		}
-	}
+	}*/
 
 	// Iterate through all the image's pixels 
 	// for each scanline
@@ -622,8 +797,10 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 				getpixel(bmp, x, y, &currPix.r, &currPix.g, &currPix.b);
 
 				// find closest color match from palette we chose
-				//bestcol = FindBestColorMatchFromPalette(currPix, pmdata->Palettes[palToUse], BgColor); // Slow but dynamic palette
-				bestcol = ColorLookup[currPix.r][currPix.g][currPix.b][palToUse]; // Quick but locked to one palette
+				bestcol = FindBestColorMatchFromPalette(currPix, pmdata->Palettes[palToUse], BgColor); // Slow but dynamic palette
+				//bestcol = ColorLookup[currPix.r][currPix.g][currPix.b][palToUse]; // Quick but locked to one palette
+
+				//printf("bc %d r %d g %d b %d, ", pmdata->Palettes[palToUse][bestcol], currPix.r, currPix.g, currPix.b);
 
 				// Shift the index up one, so -1 becomes zero, which is how it will appear in the nes palette
 				bestcol++;
@@ -636,6 +813,7 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 
 				offset--;
 			}
+			//printf("\n");
 
 			// Store the first two tiles in the previous scanline
 			if (i < 2)

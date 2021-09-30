@@ -192,17 +192,23 @@ int main()
 	GFXSetup();
 
 	fd = shm_open("/sdlrawout", O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
-	if (fd == -1)
+	if (fd == -1) {
+		perror("main: shm_open error");
 		exit(1);
+	}
 
-	if (ftruncate(fd, sizeof(struct region)) == -1)
+	if (ftruncate(fd, sizeof(struct region)) == -1) {
+		perror("main: ftruncate error");
 		exit(1);
+	}
 
 	/* Map shared memory object */
 	rptr = mmap(NULL, sizeof(struct region),
 				PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	if (rptr == MAP_FAILED)
+	if (rptr == MAP_FAILED) {
+		perror("main: mmap error");
 		exit(1);
+	}
 
 	pthread_condattr_init(&cattr);
 	pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED);
