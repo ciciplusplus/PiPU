@@ -718,7 +718,7 @@ void FindBgColorAndPalette(char *frameBuf, bool skip)
 		for (int x = 0; x < 256; x++) {
 			getpixel(frameBuf, x, y, &currPix.r, &currPix.g, &currPix.b);
 
-			MostCommonColorInFrame[FindBestColorMatch(currPix)].frequency++;
+			MostCommonColorInFrame[ColorSimilarity[currPix.r][currPix.g][currPix.b]].frequency++;
 		}
 	}
 
