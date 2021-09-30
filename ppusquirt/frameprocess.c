@@ -437,7 +437,7 @@ void GFXSetup()
 	pmdata->Palettes[3][2] = 0x20;*/
 
 	//R
-	pmdata->Palettes[0][0] = 0x06;
+/*	pmdata->Palettes[0][0] = 0x06;
 	pmdata->Palettes[0][1] = 0x16;
 	pmdata->Palettes[0][2] = 0x26;
 
@@ -454,7 +454,7 @@ void GFXSetup()
 	//greys and white
 	pmdata->Palettes[3][0] = 0x2D;
 	pmdata->Palettes[3][1] = 0x3D;
-	pmdata->Palettes[3][2] = 0x20;
+	pmdata->Palettes[3][2] = 0x20;*/
 
 	//R + white
 	/*pmdata->Palettes[0][0] = 0x06;
@@ -511,6 +511,19 @@ void GFXSetup()
 	pmdata->Palettes[3][0] = 0x2a;
 	pmdata->Palettes[3][1] = 0x2c;
 	pmdata->Palettes[3][2] = 0x1c;*/
+
+	pmdata->Palettes[0][0] = 0x20;
+	pmdata->Palettes[0][1] = 0x11;
+	pmdata->Palettes[0][2] = 0x3d;
+	pmdata->Palettes[1][0] = 0x3c;
+	pmdata->Palettes[1][1] = 0x2c;
+	pmdata->Palettes[1][2] = 0x21;
+	pmdata->Palettes[2][0] = 0x38;
+	pmdata->Palettes[2][1] = 0x27;
+	pmdata->Palettes[2][2] = 0x00;
+	pmdata->Palettes[3][0] = 0x0d;
+	pmdata->Palettes[3][1] = 0x01;
+	pmdata->Palettes[3][2] = 0x2d;
 
 	// Pre-gen contrast factor
 	contrastFactor = (259 * (contrast + 255)) / (255 * (259 - contrast));
