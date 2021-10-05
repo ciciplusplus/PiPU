@@ -24,7 +24,7 @@ dtoverlay=pi3-miniuart-bt
 
 #pipu stuff
 enable_uart=1
-dtoverlay=pi3-disable-wifi
+#dtoverlay=pi3-disable-wifi
 arm_freq=400
 arm_freq_max=400
 gpu_freq=250
