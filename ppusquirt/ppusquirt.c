@@ -85,8 +85,8 @@ void *Squirt(void *threadid)
     ioctl(fd, UI_SET_KEYBIT, KEY_LEFT);
     ioctl(fd, UI_SET_KEYBIT, KEY_RIGHT);
     ioctl(fd, UI_SET_KEYBIT, KEY_SPACE);
-    ioctl(fd, UI_SET_KEYBIT, KEY_LEFTCTRL);
-    ioctl(fd, UI_SET_KEYBIT, KEY_LEFTALT);
+    ioctl(fd, UI_SET_KEYBIT, KEY_EQUAL);
+    ioctl(fd, UI_SET_KEYBIT, KEY_MINUS);
     memset(&usetup, 0, sizeof(usetup));
     usetup.id.bustype = BUS_USB;
     usetup.id.vendor = 0x1234; 
@@ -145,13 +145,13 @@ void *Squirt(void *threadid)
         if (r == 0 && actual_length == sizeof(indata))
         {
             if (indata[0] & PAD_A)
-                emit(fd, EV_KEY, KEY_LEFTCTRL, 1);
+                emit(fd, EV_KEY, KEY_EQUAL, 1);
             else
-                emit(fd, EV_KEY, KEY_LEFTCTRL, 0);
+                emit(fd, EV_KEY, KEY_EQUAL, 0);
             if (indata[0] & PAD_B)
-                emit(fd, EV_KEY, KEY_LEFTALT, 1);
+                emit(fd, EV_KEY, KEY_MINUS, 1);
             else
-                emit(fd, EV_KEY, KEY_LEFTALT, 0);
+                emit(fd, EV_KEY, KEY_MINUS, 0);
             if (indata[0] & PAD_START)
                 emit(fd, EV_KEY, KEY_ESC, 1);
             else
