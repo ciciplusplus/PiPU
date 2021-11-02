@@ -11,17 +11,20 @@
 #include <libusb-1.0/libusb.h>
 #include "nesstuff.h"
 
+#include <SDL2/SDL.h>
+#include <assert.h>
+
 #define NUM_GFX_THREADS 2
 
 threaddata threads[NUM_GFX_THREADS];
-int scanlinesperthread = 240 / NUM_GFX_THREADS;
+int scanlinesperthread = HEIGHT / NUM_GFX_THREADS;
 
 PPUFrame outbuf[2];
 
 struct region *rptr;
 
 void *Squirt(void *threadid);
-void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline);
+void FitFrame(SDL_Renderer *renderer, SDL_Texture *data_tx, char *bmp, PPUFrame *theFrame, int startline, int endline);
 void GFXSetup();
 
 pthread_mutex_t outmutex, bufferswitchmutex;
@@ -58,8 +61,8 @@ void *gfxthread(void *threadid)
 
 	endline = (td->threadno * scanlinesperthread) + (scanlinesperthread);
 
-	if (endline > 240)
-		endline = 240;
+	if (endline > HEIGHT)
+		endline = HEIGHT;
 
 	printf("thread no %d - lines %d-%d\n", td->threadno, startline, endline);
 	//rptr->full = 0;
@@ -72,6 +75,8 @@ void *gfxthread(void *threadid)
 
 	while (1)
 	{
+		for(SDL_Event event; SDL_PollEvent(&event);)
+			if(event.type == SDL_QUIT) exit(0);
 
 		// wait for done flag to be reset by thread 0
 		if (td->threadno != 0)
@@ -108,7 +113,7 @@ void *gfxthread(void *threadid)
 		}
 
 		// Convert frame section to NES format
-		FitFrame(&rptr->buf, &outbuf[writeBuf], startline, endline);
+		FitFrame(td->renderer, td->data_tx, &rptr->buf, &outbuf[writeBuf], startline, endline);
 
 		// if this is thread zero, wait for other threads to finish then switch the double buffer
 		if (td->threadno == 0)
@@ -174,6 +179,19 @@ void *gfxthread(void *threadid)
 	}
 }
 
+static _Bool init_app(uint32_t flags)
+{
+    atexit(SDL_Quit);
+    if (SDL_Init(flags) < 0) {
+        printf("SDL INIT failed: %s", SDL_GetError());
+        return 0;
+    }
+    return 1;
+}
+
+static int SDLCALL filter(void *userdata, SDL_Event * event)
+{ return event->type == SDL_QUIT; }
+
 int main()
 {
 
@@ -210,6 +228,19 @@ int main()
 		exit(1);
 	}
 
+	_Bool ok = init_app(SDL_INIT_VIDEO);
+    assert(ok);
+    SDL_Window *sdlWindow = SDL_CreateWindow("SDL example",
+                                          SDL_WINDOWPOS_UNDEFINED,
+                                          SDL_WINDOWPOS_UNDEFINED,
+                                          WIDTH, HEIGHT,
+                                          SDL_WINDOW_OPENGL);
+    SDL_Renderer *renderer = SDL_CreateRenderer(sdlWindow, -1, 0);
+
+    SDL_Texture *data_tx = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_STREAMING, WIDTH, HEIGHT);
+
+    SDL_SetEventFilter(filter, NULL);
+
 	pthread_condattr_init(&cattr);
 	pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED);
 
@@ -233,6 +264,9 @@ int main()
 
 	for (int i = 0; i < NUM_GFX_THREADS; i++)
 	{
+		threads[i].renderer = renderer;
+		threads[i].data_tx = data_tx;
+
 		threads[i].threadno = i;
 		threads[i].outbuffull = 0;
 		pthread_mutex_init(&threads[i].donelock, NULL);
@@ -252,7 +286,6 @@ int main()
 		printf("ERROR; return code from pthread_create() is %d\n", rc);
 		exit(-1);
 	}
-
 
 	while (1){
 		sleep(10);

@@ -1,3 +1,8 @@
+#include <SDL2/SDL.h>
+
+#define WIDTH 320
+#define HEIGHT 240
+
 #define NESCOLORCOUNT 64
 
 // One 8x1 pixel tile of the PPU frame
@@ -57,6 +62,9 @@ typedef struct threaddata{
 	int done;
 
 	pthread_t handle;
+
+	SDL_Renderer *renderer;
+	SDL_Texture *data_tx;
 } threaddata;
 
 // Gamepad scancode

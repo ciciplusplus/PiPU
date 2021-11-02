@@ -778,8 +778,17 @@ void SortAndAssignUpdatedPalette()
 bool mustUpdatePalette = false;
 bool hasUpdatedPalette = false;
 
+static void render(SDL_Renderer *renderer, SDL_Texture *data_tx, char *bmp)
+{
+	SDL_RenderClear(renderer);
+	if (SDL_UpdateTexture(data_tx, NULL, bmp, WIDTH * 4) < 0)
+		printf("Update texture failed %s", SDL_GetError());
+	SDL_RenderCopy(renderer, data_tx, NULL, NULL);
+	SDL_RenderPresent(renderer);
+}
+
 // Convert a single frame segment to NES format
-void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
+void FitFrame(SDL_Renderer *renderer, SDL_Texture *data_tx, char *bmp, PPUFrame *theFrame, int startline, int endline)
 {
 	int x, y, i, offset;
 	Color currPix;
@@ -834,6 +843,8 @@ void FitFrame(char *bmp, PPUFrame *theFrame, int startline, int endline)
 		theFrame->OtherData[31] = 0xEF; // Magic Value
 
 		//WriteImage("test.bmp", bmp, 320, 240, 4);
+
+		render(renderer, data_tx, bmp);
 	}
 
 /*	// First apply dithering and brightness/contrast adjustment
